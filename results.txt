@@ -1,0 +1,5 @@
+3 authors (Twain, London, Wilde)
+RANGE = 10, .80, 0.063 5-fold
+RANGE = 10, .88, 0.061 10-fold
+RANGE = 30, .84, 0.075 5-fold
+RANGE = 30, .78, 0.075 10-fold

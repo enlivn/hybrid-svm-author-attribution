@@ -1,7 +1,7 @@
-And
-But
-Or
-Nor
-For
-Yet
-So
+and
+but
+or
+nor
+for
+yet
+so
