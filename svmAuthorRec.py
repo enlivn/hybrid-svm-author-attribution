@@ -70,7 +70,7 @@ def loadFeaturesForBook(filename, smartStopWords, pronSet, conjSet):
 
         4. no. of sentences of length in the range [1,RANGE] divided by the
            number of total sentences
-        5. no. of words of length in the range [4,18] divided by the
+        5. no. of words of length in the range [1,RANGE] divided by the
            number of total words
         6. no. of nominative pronouns per sentence in the range [1,RANGE] divided by the
            number of total sentences
@@ -154,7 +154,7 @@ def loadFeaturesForBook(filename, smartStopWords, pronSet, conjSet):
 
     return result
 
-def withCrossFoldValidation(x, y, scoring):
+def binaryClassificationWithCrossFoldValidation(x, y, scoring):
     # feature selection since we have a small sample space
     fs = SelectPercentile(scoring, percentile=20)
 
@@ -169,7 +169,7 @@ def withCrossFoldValidation(x, y, scoring):
     score = cross_val_score(pipeline, x, y, cv=cval) # reports estimator accuracy
     print "%2.3f (+/- %2.3f)" % (np.mean(score), sem(score))
 
-def withoutCrossFoldValidation(x, y, scoring):
+def binaryClassificationWithoutCrossFoldValidation(x, y, scoring):
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.3, random_state=42) # 30% reserved for validation
 
     # feature selection since we have a small sample space
@@ -267,7 +267,7 @@ def runClassification():
         x,y = loadBookDataFromFeaturesFile()
 
     print 'Running classification'
-    withCrossFoldValidation(x,y,f_classif) # use ANOVA scoring
+    binaryClassificationWithCrossFoldValidation(x,y,f_classif) # use ANOVA scoring
 
 if __name__ == '__main__':
     runClassification()
