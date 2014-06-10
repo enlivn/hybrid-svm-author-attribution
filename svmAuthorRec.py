@@ -7,17 +7,20 @@ from nltk.tokenize import sent_tokenize
 from os import walk
 from os import path
 from sklearn import metrics
-from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.cross_validation import cross_val_score, KFold, train_test_split, StratifiedShuffleSplit
+from sklearn.preprocessing import MinMaxScaler, StandardScaler, LabelEncoder
+from sklearn.cross_validation import cross_val_score, train_test_split, StratifiedShuffleSplit
 from sklearn.pipeline import Pipeline
+from sklearn.svm import SVC
 from sklearn.linear_model.stochastic_gradient import SGDClassifier
-from sklearn.feature_selection import SelectPercentile, chi2, f_classif
+from sklearn.feature_selection import SelectPercentile, SelectKBest, chi2, f_classif
+from sklearn.multiclass import OneVsRestClassifier
 from scipy.stats import sem # standard error of mean
 import numpy as np
 import matplotlib.pyplot as pt
+from random import randint
 
 NUMFOLDS = 5
-RANGE = 16
+RANGE = 25
 FEATURESFILE = 'bookfeatures.txt'
 
 class MyFreqDist(FreqDist):
@@ -38,7 +41,7 @@ def extractBookContents(text):
     # remove PG header and footer
     _1 = re.split(start,text)
     _2 = re.split(end,_1[1])
-    return _2[0].lower()
+    return _2[0].lower() # lower-case everything
 
 def buildPronounSet():
     return set(open('nompronouns.txt','r').read().strip().split('\n'))
@@ -80,7 +83,7 @@ def loadFeaturesForBook(filename, smartStopWords, pronSet, conjSet):
     text = open(filename,'r').read()
 
     contents = extractBookContents(text)
-    contents = contents.replace('\r\n',' ').replace('"','').replace('_','')
+    contents = contents.replace('\r\n',' ') #.replace('"','').replace('_','')
     sentenceList = sent_tokenize(contents)
 
     cleanWords = []
@@ -134,15 +137,6 @@ def loadFeaturesForBook(filename, smartStopWords, pronSet, conjSet):
     pronounDist = map(lambda x: pronounDistribution.freq(x), range(1,RANGE))
     conjunctionDist = map(lambda x: conjunctionDistribution.freq(x), range(1,RANGE))
 
-    #print hapax
-    #print dis
-    #print richness
-
-    #print sentenceLengthDist
-    #print wordLengthDist
-    #print pronounDist
-    #print conjunctionDist
-
     result = []
     result.append(hapax)
     result.append(dis)
@@ -154,28 +148,34 @@ def loadFeaturesForBook(filename, smartStopWords, pronSet, conjSet):
 
     return result
 
-def binaryClassificationWithCrossFoldValidation(x, y, scoring):
+def withCrossFoldValidation(x, y, estimator, scoring):
     # feature selection since we have a small sample space
-    fs = SelectPercentile(scoring, percentile=20)
+    #fs = SelectPercentile(scoring, percentile=20)
+    fs = SelectKBest(f_classif, k=50)
 
-    pipeline = Pipeline([('featureselector',fs),('scaler',StandardScaler()),('estimator',SGDClassifier())])
+    pipeline = Pipeline([('featureselector',fs),('scaler',MinMaxScaler(feature_range=[-1,1])),('estimator',estimator)])
+    #pipeline = Pipeline([('featureselector',fs),('scaler',StandardScaler()),('estimator',estimator)])
+    #pipeline = Pipeline([('scaler',StandardScaler()),('estimator',estimator)])
 
     # StratifiedShuffleSplit returns stratified splits, i.e both train and test sets
     # preserve the same percentage for each target class as in the complete set.
     # Better than k-Fold shuffle since it allows finer control over samples on each
     # side of the train/test split.
-    cval = StratifiedShuffleSplit(y, n_iter=NUMFOLDS, test_size=.25)
+    cval = StratifiedShuffleSplit(y, n_iter=NUMFOLDS, test_size=.25, random_state=randint(1,100))
+    pipeline = OneVsRestClassifier(pipeline)
 
     score = cross_val_score(pipeline, x, y, cv=cval) # reports estimator accuracy
     print "%2.3f (+/- %2.3f)" % (np.mean(score), sem(score))
 
-def binaryClassificationWithoutCrossFoldValidation(x, y, scoring):
-    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.3, random_state=42) # 30% reserved for validation
+def withoutCrossFoldValidation(x, y, estimator, scoring):
+    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.3) # 30% reserved for validation
 
     # feature selection since we have a small sample space
     fs = SelectPercentile(scoring, percentile=20)
 
-    pipeline = Pipeline([('featureselector',fs),('scaler',StandardScaler()),('estimator',SGDClassifier())])
+    pipeline = Pipeline([('featureselector',fs),('scaler',StandardScaler()),('estimator', estimator)])
+
+    pipeline = OneVsRestClassifier(pipeline)
 
     clfer = pipeline.fit(x_train, y_train)
     y_predict_train = clfer.predict(x_train)
@@ -241,7 +241,7 @@ def loadBookDataFromFeaturesFile():
         x.append(map(float,l[2].split(',')))
     return np.array(x), np.array(y)
 
-def saveBookFeatures(x,y,le):
+def saveBookFeaturesToFile(x,y,le):
     f = open(FEATURESFILE,'wb')
     for index,item in enumerate(x):
         f.write("%s\t%d\t%s\n" % (le.inverse_transform(y[index]),y[index],','.join(map(str,item))))
@@ -257,17 +257,29 @@ def runClassification():
         smartStopWords = buildStopWordsSet()
 
         dirList, fileList = getFiles('corpus')
-        #dirList = ['hermann-melville','mark-twain'] # testing
-        #fileList = [['corpus/herman-melville/pg2701.txt'],['corpus/mark-twain/pg74.txt']] # testing
+
+        ######### testing only #########
+        #dirList =['herman-melville', 'leo-tolstoy', 'mark-twain']
+        #fileList = [['corpus/herman-melville/pg2701.txt', 'corpus/herman-melville/pg15859.txt',
+        #             'corpus/herman-melville/pg10712.txt', 'corpus/herman-melville/pg21816.txt'],
+        #            ['corpus/leo-tolstoy/pg2142.txt', 'corpus/leo-tolstoy/pg243.txt',
+        #             'corpus/leo-tolstoy/1399-0.txt', 'corpus/leo-tolstoy/pg985.txt'],
+        #            ['corpus/mark-twain/pg74.txt', 'corpus/mark-twain/pg245.txt',
+        #             'corpus/mark-twain/pg3176.txt', 'corpus/mark-twain/pg119.txt']]
+        ######### testing only #########
+
         x,y,le = loadBookDataFromCorpus(dirList, fileList, smartStopWords, pronSet, conjSet)
-        saveBookFeatures(x,y,le)
+        saveBookFeaturesToFile(x,y,le)
         print '... done.'
     else:
         print '{0} found. Reading...'.format(FEATURESFILE)
         x,y = loadBookDataFromFeaturesFile()
 
     print 'Running classification'
-    binaryClassificationWithCrossFoldValidation(x,y,f_classif) # use ANOVA scoring
+    withCrossFoldValidation(x,y,SVC(kernel='linear'),f_classif) # use ANOVA scoring
+    #withoutCrossFoldValidation(x,y,LinearSVC(),f_classif) # use ANOVA scoring
+    #withCrossFoldValidation(x,y,SGDClassifier(),f_classif) # use ANOVA scoring
+    #withoutCrossFoldValidation(x,y,SGDClassifier(),f_classif) # use ANOVA scoring
 
 if __name__ == '__main__':
     runClassification()
