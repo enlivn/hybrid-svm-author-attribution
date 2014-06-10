@@ -4,10 +4,10 @@ import re
 from nltk import FreqDist
 from nltk.corpus import stopwords
 from nltk.tokenize import sent_tokenize
-from os.path import join
 from os import walk
+from os import path
 from sklearn import metrics
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.cross_validation import cross_val_score, KFold, train_test_split, StratifiedShuffleSplit
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model.stochastic_gradient import SGDClassifier
@@ -52,10 +52,12 @@ def buildStopWordsSet():
 
 def getFiles(dir):
     fileList = []
+    dirList = []
     for (dirpath, dirname, files) in walk(dir):
         if files:
-            fileList.append(map(lambda x: join(dirpath,x), files))
-    return fileList
+            dirList.append(path.split(dirpath)[1])
+            fileList.append(map(lambda x: path.join(dirpath,x), files))
+    return dirList, fileList
 
 def loadFeaturesForBook(filename, smartStopWords, pronSet, conjSet):
     '''
@@ -157,7 +159,7 @@ def withCrossFoldValidation(x, y, scoring):
 
     pipeline = Pipeline([('featureselector',fs),('scaler',StandardScaler()),('estimator',SGDClassifier())])
 
-    # StratifiedShuffleSplit returns stratified splits, i.e train/test splits that
+    # StratifiedShuffleSplit returns stratified splits, i.e both train and test sets
     # preserve the same percentage for each target class as in the complete set.
     # Better than k-Fold shuffle since it allows finer control over samples on each
     # side of the train/test split.
@@ -165,6 +167,7 @@ def withCrossFoldValidation(x, y, scoring):
 
     score = cross_val_score(pipeline, x, y, cv=cval) # reports estimator accuracy
     print "%2.3f (+/- %2.3f)" % (np.mean(score), sem(score))
+    return pipeline
 
 def withoutCrossFoldValidation(x, y, scoring):
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.3, random_state=42) # 30% reserved for validation
@@ -218,21 +221,22 @@ def createSentenceDistributionPlot(x,y):
     pt.xticks(m)
     pt.show()
 
-def loadBookData(fileList, smartStopWords, pronSet, conjSet):
+def loadBookData(dirList, fileList, smartStopWords, pronSet, conjSet):
     x = []
     y = []
-    for index, files in enumerate(fileList): # 0 - Mark Twain, 1 - Jack London, 2 - Oscar Wilde
+    for index, files in enumerate(fileList):
         for f in files:
-            y.append(index)
+            y.append(dirList[index])
             x.append(loadFeaturesForBook(f, smartStopWords, pronSet, conjSet))
-    return np.array(x), np.array(y)
+    le = LabelEncoder().fit(y)
+    return np.array(x), np.array(le.transform(y))
 
 if __name__ == '__main__':
     pronSet = buildPronounSet()
     conjSet = buildConjSet()
     smartStopWords = buildStopWordsSet()
 
-    fileList = getFiles('corpus')
-    x,y = loadBookData(fileList, smartStopWords, pronSet, conjSet)
-    withCrossFoldValidation(x,y,f_classif)
+    dirList, fileList = getFiles('corpus')
+    x,y = loadBookData(dirList, fileList, smartStopWords, pronSet, conjSet)
+    withCrossFoldValidation(x,y,f_classif) # use ANOVA scoring
 
