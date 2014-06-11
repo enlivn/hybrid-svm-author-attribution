@@ -10,7 +10,7 @@ from sklearn import metrics
 from sklearn.preprocessing import MinMaxScaler, StandardScaler, LabelEncoder
 from sklearn.cross_validation import cross_val_score, train_test_split, StratifiedShuffleSplit
 from sklearn.pipeline import Pipeline
-from sklearn.svm import SVC
+from sklearn.svm import SVC, LinearSVC
 from sklearn.linear_model.stochastic_gradient import SGDClassifier
 from sklearn.feature_selection import SelectPercentile, SelectKBest, chi2, f_classif
 from sklearn.multiclass import OneVsRestClassifier
@@ -149,20 +149,18 @@ def loadFeaturesForBook(filename, smartStopWords, pronSet, conjSet):
     return result
 
 def withCrossFoldValidation(x, y, estimator, scoring):
-    # feature selection since we have a small sample space
-    #fs = SelectPercentile(scoring, percentile=20)
-    fs = SelectKBest(f_classif, k=50)
+    # univariate feature selection since we have a small sample space
+    fs = SelectKBest(scoring, k=50)
 
-    pipeline = Pipeline([('featureselector',fs),('scaler',MinMaxScaler(feature_range=[-1,1])),('estimator',estimator)])
-    #pipeline = Pipeline([('featureselector',fs),('scaler',StandardScaler()),('estimator',estimator)])
-    #pipeline = Pipeline([('scaler',StandardScaler()),('estimator',estimator)])
+    pipeline = Pipeline([('featureselector',fs),
+                         ('scaler',MinMaxScaler(feature_range=(-1,1))),
+                         ('estimator',estimator)])
 
     # StratifiedShuffleSplit returns stratified splits, i.e both train and test sets
     # preserve the same percentage for each target class as in the complete set.
     # Better than k-Fold shuffle since it allows finer control over samples on each
     # side of the train/test split.
-    cval = StratifiedShuffleSplit(y, n_iter=NUMFOLDS, test_size=.25, random_state=randint(1,100))
-    pipeline = OneVsRestClassifier(pipeline)
+    cval = StratifiedShuffleSplit(y, n_iter=NUMFOLDS, test_size=.35) #, random_state=randint(1,100))
 
     score = cross_val_score(pipeline, x, y, cv=cval) # reports estimator accuracy
     print "%2.3f (+/- %2.3f)" % (np.mean(score), sem(score))
@@ -276,10 +274,7 @@ def runClassification():
         x,y = loadBookDataFromFeaturesFile()
 
     print 'Running classification'
-    withCrossFoldValidation(x,y,SVC(kernel='linear'),f_classif) # use ANOVA scoring
-    #withoutCrossFoldValidation(x,y,LinearSVC(),f_classif) # use ANOVA scoring
-    #withCrossFoldValidation(x,y,SGDClassifier(),f_classif) # use ANOVA scoring
-    #withoutCrossFoldValidation(x,y,SGDClassifier(),f_classif) # use ANOVA scoring
+    withCrossFoldValidation(x,y,LinearSVC(),f_classif) # use ANOVA scoring
 
 if __name__ == '__main__':
     runClassification()
