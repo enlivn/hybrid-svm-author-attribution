@@ -67,19 +67,20 @@ def getFileList(dir):
 
 def loadFeaturesForBook(filename, smartStopWords={}, pronSet={}, conjSet={}):
     '''
-    Load features for each book in the corpus. There are 3 + RANGE*4 features
+    Load features for each book in the corpus. There are 4 + RANGE*4 features
     for each instance. These features are:
         1. number of hapax legomena divided by number of unique words
         2. number of dis legomena divided by number of unique words
         3. number of unique words divided by number of total words
+        4. flesch readability score divided by 100
 
-        4. no. of sentences of length in the range [1,RANGE] divided by the
+        5. no. of sentences of length in the range [1,RANGE] divided by the
            number of total sentences
-        5. no. of words of length in the range [1,RANGE] divided by the
+        6. no. of words of length in the range [1,RANGE] divided by the
            number of total words
-        6. no. of nominative pronouns per sentence in the range [1,RANGE] divided by the
+        7. no. of nominative pronouns per sentence in the range [1,RANGE] divided by the
            number of total sentences
-        7. no. of (coordinating + subordinating) conjunctions per sentence in the range
+        8. no. of (coordinating + subordinating) conjunctions per sentence in the range
            [1,RANGE] divided by the number of total sentences
     '''
     text = extractBookContents(open(filename,'r').read()).lower()
