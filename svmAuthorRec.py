@@ -46,15 +46,15 @@ def extractBookContents(text):
     return _2[0] # lower-case everything
 
 def buildPronounSet():
-    return set(open('nompronouns.txt','r').read().strip().split('\n'))
+    return set(open('nompronouns.txt','r').read().splitlines())
 
 def buildConjSet():
-    return set(open('coordconj.txt','r').read().strip().split('\n')).union(
-           set(open('subordconj.txt','r').read().strip().split('\n')))
+    return set(open('coordconj.txt','r').read().splitlines()).union(
+           set(open('subordconj.txt','r').read().splitlines()))
 
 def buildStopWordsSet():
     # source: http://jmlr.org/papers/volume5/lewis04a/a11-smart-stop-list/english.stop
-    return set(open('smartstop.txt','r').read().strip().split())
+    return set(open('smartstop.txt','r').read().splitlines())
 
 def getFileList(dir):
     fileList = []
