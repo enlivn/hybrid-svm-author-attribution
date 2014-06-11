@@ -18,8 +18,10 @@ from scipy.stats import sem # standard error of mean
 import numpy as np
 import matplotlib.pyplot as pt
 from random import randint
+from syllables_en import count
+from time import time
 
-NUMFOLDS = 5
+NUMFOLDS = 10
 RANGE = 25
 FEATURESFILE = 'bookfeatures.txt'
 
@@ -41,7 +43,7 @@ def extractBookContents(text):
     # remove PG header and footer
     _1 = re.split(start,text)
     _2 = re.split(end,_1[1])
-    return _2[0].lower() # lower-case everything
+    return _2[0] # lower-case everything
 
 def buildPronounSet():
     return set(open('nompronouns.txt','r').read().strip().split('\n'))
@@ -54,7 +56,7 @@ def buildStopWordsSet():
     # source: http://jmlr.org/papers/volume5/lewis04a/a11-smart-stop-list/english.stop
     return set(open('smartstop.txt','r').read().strip().split())
 
-def getFiles(dir):
+def getFileList(dir):
     fileList = []
     dirList = []
     for (dirpath, dirname, files) in walk(dir):
@@ -63,7 +65,7 @@ def getFiles(dir):
             fileList.append(map(lambda x: path.join(dirpath,x), files))
     return dirList, fileList
 
-def loadFeaturesForBook(filename, smartStopWords, pronSet, conjSet):
+def loadFeaturesForBook(filename, smartStopWords={}, pronSet={}, conjSet={}):
     '''
     Load features for each book in the corpus. There are 3 + RANGE*4 features
     for each instance. These features are:
@@ -80,49 +82,60 @@ def loadFeaturesForBook(filename, smartStopWords, pronSet, conjSet):
         7. no. of (coordinating + subordinating) conjunctions per sentence in the range
            [1,RANGE] divided by the number of total sentences
     '''
-    text = open(filename,'r').read()
+    text = extractBookContents(open(filename,'r').read()).lower()
 
-    contents = extractBookContents(text)
-    contents = contents.replace('\r\n',' ') #.replace('"','').replace('_','')
-    sentenceList = sent_tokenize(contents)
+    contents = re.sub('\'s|(\r\n)|-+|["_]',' ',text)
+    sentenceList = sent_tokenize(contents.strip())
 
     cleanWords = []
     sentenceLenDist = []
     pronDist = []
     conjDist = []
     sentences = []
-    allWords = []
+    totalWords = 0
     wordLenDist = []
+    totalSyllables = 0
     for sentence in sentenceList:
         if sentence != ".":
             pronCount = 0
             conjCount = 0
             sentences.append(sentence)
             sentenceWords = re.findall(r"[\w']+", sentence)
-            allWords.extend(sentenceWords) # record all words in sentence
+            totalWords += len(sentenceWords) # record all words in sentence
             sentenceLenDist.append(len(sentenceWords)) # record length of sentence in words
             for word in sentenceWords:
+                totalSyllables += count(word)
                 wordLenDist.append(len(word)) # record length of word in chars
                 if word in pronSet:
                     pronCount+=1 # record no. of pronouns in sentence
                 if word in conjSet:
                     conjCount+=1 # record no. of conjunctions in sentence
-                if word.endswith("'s"):
-                    word = word[:-2] # remove the apostrophe
                 if word not in smartStopWords:
                     cleanWords.append(word)
             pronDist.append(pronCount)
             conjDist.append(conjCount)
 
     sentenceLengthDistribution = FreqDist(sentenceLenDist)
+    sentenceLengthDist = map(lambda x: sentenceLengthDistribution.freq(x), range(1,RANGE))
+
     pronounDistribution = FreqDist(pronDist)
+    pronounDist = map(lambda x: pronounDistribution.freq(x), range(1,RANGE))
+
     conjunctionDistribution = FreqDist(conjDist)
+    conjunctionDist = map(lambda x: conjunctionDistribution.freq(x), range(1,RANGE))
+
     wordLengthDistribution = FreqDist(wordLenDist)
+    wordLengthDist = map(lambda x: wordLengthDistribution.freq(x), range(1,RANGE))
+
+    avgSentenceLength = float(totalWords)/len(sentenceList)
+    avgSyllablesPerWord = float(totalSyllables)/totalWords
+    readability = float(206.835 - (1.015 * avgSentenceLength) - (84.6 * avgSyllablesPerWord))/100
+    #print filename, totalSyllables, avgSentenceLength, avgSyllablesPerWord, readability
 
     #sentenceDist = FreqDist(sentences)
     #print sentenceDist.keys()[:15] # most common sentences
     wordsDist = MyFreqDist(FreqDist(cleanWords))
-    #print wordsDist.keys()[:30] # most common words
+    #print wordsDist.keys()[:15] # most common words
     #print wordsDist.keys()[-15:] # most UNcommon words
 
     numUniqueWords = len(wordsDist.keys())
@@ -132,15 +145,11 @@ def loadFeaturesForBook(filename, smartStopWords, pronSet, conjSet):
     dis = float(len(wordsDist.dises()))/numUniqueWords # no. words occurring twice / total num. UNIQUE words
     richness = float(numUniqueWords)/numTotalWords # no. unique words / total num. words
 
-    sentenceLengthDist = map(lambda x: sentenceLengthDistribution.freq(x), range(1,RANGE))
-    wordLengthDist = map(lambda x: wordLengthDistribution.freq(x), range(1,RANGE))
-    pronounDist = map(lambda x: pronounDistribution.freq(x), range(1,RANGE))
-    conjunctionDist = map(lambda x: conjunctionDistribution.freq(x), range(1,RANGE))
-
     result = []
     result.append(hapax)
     result.append(dis)
     result.append(richness)
+    result.append(readability)
     result.extend(sentenceLengthDist)
     result.extend(wordLengthDist)
     result.extend(pronounDist)
@@ -148,13 +157,13 @@ def loadFeaturesForBook(filename, smartStopWords, pronSet, conjSet):
 
     return result
 
-def withCrossFoldValidation(x, y, estimator, scoring):
+def withCrossFoldValidation(x, y, estimator=LinearSVC(), scoring=f_classif):
     # univariate feature selection since we have a small sample space
-    fs = SelectKBest(scoring, k=50)
+    fs = SelectKBest(scoring, k=70)
 
-    pipeline = Pipeline([('featureselector',fs),
-                         ('scaler',MinMaxScaler(feature_range=(-1,1))),
-                         ('estimator',estimator)])
+    pipeline = Pipeline([('featureselector', fs),
+                         ('scaler', MinMaxScaler(feature_range=(0,1))),
+                         ('estimator', estimator)])
 
     # StratifiedShuffleSplit returns stratified splits, i.e both train and test sets
     # preserve the same percentage for each target class as in the complete set.
@@ -162,8 +171,11 @@ def withCrossFoldValidation(x, y, estimator, scoring):
     # side of the train/test split.
     cval = StratifiedShuffleSplit(y, n_iter=NUMFOLDS, test_size=.35) #, random_state=randint(1,100))
 
-    score = cross_val_score(pipeline, x, y, cv=cval) # reports estimator accuracy
-    print "%2.3f (+/- %2.3f)" % (np.mean(score), sem(score))
+    # Inherently multiclass: Naive Bayes, sklearn.lda.LDA, Decision Trees, Random Forests, Nearest Neighbors.
+    # One-Vs-One: sklearn.svm.SVC.
+    # One-Vs-All: all linear models except sklearn.svm.SVC.
+    scores = cross_val_score(pipeline, x, y, cv=cval, n_jobs=-1) # reports estimator accuracy
+    print "%2.3f (+/- %2.3f)" % (np.mean(scores), sem(scores))
 
 def withoutCrossFoldValidation(x, y, estimator, scoring):
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.3) # 30% reserved for validation
@@ -206,9 +218,9 @@ def createLegomenaPlot(x, y):
 # diagnostic plot
 def createSentenceDistributionPlot(x,y):
     barwidth = 0.3
-    tomsawyer = loadFeaturesForBook('corpus/0/pg74.txt')[3:28]
-    huckfinn = loadFeaturesForBook('corpus/0/pg76.txt')[3:28]
-    princepauper = loadFeaturesForBook('corpus/0/pg1837.txt')[3:28]
+    tomsawyer = loadFeaturesForBook('corpus/0/pg74.txt')[4:29]
+    huckfinn = loadFeaturesForBook('corpus/0/pg76.txt')[4:29]
+    princepauper = loadFeaturesForBook('corpus/0/pg1837.txt')[4:29]
     m = np.arange(len(tomsawyer))
     pt.bar(m,tomsawyer,barwidth,label='Tom Sawyer',color='r')
     pt.bar(m+barwidth,huckfinn,barwidth,label='Huck Finn',color='b')
@@ -219,14 +231,16 @@ def createSentenceDistributionPlot(x,y):
     pt.xticks(m)
     pt.show()
 
-def loadBookDataFromCorpus(dirList, fileList, smartStopWords, pronSet, conjSet):
+def loadBookDataFromCorpus(dirList, fileList, smartStopWords={}, pronSet={}, conjSet={}):
     x = []
     y = []
+    t0 = time()
     for index, files in enumerate(fileList):
         for f in files:
             y.append(dirList[index])
             x.append(loadFeaturesForBook(f, smartStopWords, pronSet, conjSet))
     le = LabelEncoder().fit(y)
+    print '%d books loaded in %fs' % (len(x), time()-t0)
     return np.array(x), np.array(le.transform(y)), le
 
 def loadBookDataFromFeaturesFile():
@@ -239,7 +253,7 @@ def loadBookDataFromFeaturesFile():
         x.append(map(float,l[2].split(',')))
     return np.array(x), np.array(y)
 
-def saveBookFeaturesToFile(x,y,le):
+def saveBookFeaturesToFile(x, y, le):
     f = open(FEATURESFILE,'wb')
     for index,item in enumerate(x):
         f.write("%s\t%d\t%s\n" % (le.inverse_transform(y[index]),y[index],','.join(map(str,item))))
@@ -254,7 +268,7 @@ def runClassification():
         conjSet = buildConjSet()
         smartStopWords = buildStopWordsSet()
 
-        dirList, fileList = getFiles('corpus')
+        dirList, fileList = getFileList('corpus')
 
         ######### testing only #########
         #dirList =['herman-melville', 'leo-tolstoy', 'mark-twain']
