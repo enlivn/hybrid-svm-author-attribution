@@ -12,7 +12,7 @@ from sklearn.cross_validation import cross_val_score, train_test_split, Stratifi
 from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC, LinearSVC
 from sklearn.linear_model.stochastic_gradient import SGDClassifier
-from sklearn.feature_selection import SelectPercentile, SelectKBest, chi2, f_classif
+from sklearn.feature_selection import SelectPercentile, SelectKBest, chi2, f_classif, f_regression
 from sklearn.multiclass import OneVsRestClassifier, OneVsOneClassifier, _predict_binary
 from scipy.stats import sem # standard error of mean
 import numpy as np
@@ -20,7 +20,6 @@ import matplotlib.pyplot as pt
 from random import randint
 from syllables_en import count
 from time import time
-from scipy.cluster.vq import whiten
 
 NUMFOLDS = 5
 RANGE = 25 # set to 25 based on Diederich et al. 2000 as cited on page 9 of http://www.cnts.ua.ac.be/stylometry/Papers/MAThesis_KimLuyckx.pdf
@@ -42,20 +41,20 @@ def extractBookContents(text):
     end = re.compile('\*\*.*END OF ([THIS]|[THE])')
 
     # remove PG header and footer
-    _1 = re.split(start,text)
-    _2 = re.split(end,_1[1])
+    _1 = re.split(start, text)
+    _2 = re.split(end, _1[1])
     return _2[0] # lower-case everything
 
 def buildPronounSet():
-    return set(open('nompronouns.txt','r').read().splitlines())
+    return set(open('nompronouns.txt', 'r').read().splitlines())
 
 def buildConjSet():
-    return set(open('coordconj.txt','r').read().splitlines())#.union(
-           #set(open('subordconj.txt','r').read().splitlines()))
+    return set(open('coordconj.txt', 'r').read().splitlines())#.union(
+           #set(open('subordconj.txt', 'r').read().splitlines()))
 
 def buildStopWordsSet():
     # source: http://jmlr.org/papers/volume5/lewis04a/a11-smart-stop-list/english.stop
-    return set(open('smartstop.txt','r').read().splitlines())
+    return set(open('smartstop.txt', 'r').read().splitlines())
 
 def getFileList(dir):
     fileList = []
@@ -63,7 +62,7 @@ def getFileList(dir):
     for (dirpath, dirname, files) in walk(dir):
         if files:
             dirList.append(path.split(dirpath)[1])
-            fileList.append(map(lambda x: path.join(dirpath,x), files))
+            fileList.append(map(lambda x: path.join(dirpath, x), files))
     return dirList, fileList
 
 def loadFeaturesForBook(filename, smartStopWords={}, pronSet={}, conjSet={}):
@@ -75,18 +74,18 @@ def loadFeaturesForBook(filename, smartStopWords={}, pronSet={}, conjSet={}):
         3. number of unique words divided by number of total words
         4. flesch readability score divided by 100
 
-        5. no. of sentences of length in the range [1,RANGE] divided by the
+        5. no. of sentences of length in the range [1, RANGE] divided by the
            number of total sentences
-        6. no. of words of length in the range [1,RANGE] divided by the
+        6. no. of words of length in the range [1, RANGE] divided by the
            number of total words
-        7. no. of nominative pronouns per sentence in the range [1,RANGE] divided by the
+        7. no. of nominative pronouns per sentence in the range [1, RANGE] divided by the
            number of total sentences
         8. no. of (coordinating + subordinating) conjunctions per sentence in the range
-           [1,RANGE] divided by the number of total sentences
+           [1, RANGE] divided by the number of total sentences
     '''
-    text = extractBookContents(open(filename,'r').read()).lower()
+    text = extractBookContents(open(filename, 'r').read()).lower()
 
-    contents = re.sub('\'s|(\r\n)|-+|["_]',' ',text) # remove \r\n, apostrophes, and --
+    contents = re.sub('\'s|(\r\n)|-+|["_]', ' ', text) # remove \r\n, apostrophes, and --
     sentenceList = sent_tokenize(contents.strip())
 
     cleanWords = []
@@ -118,19 +117,19 @@ def loadFeaturesForBook(filename, smartStopWords={}, pronSet={}, conjSet={}):
             conjDist.append(conjCount)
 
     sentenceLengthFreqDist = FreqDist(sentenceLenDist)
-    sentenceLengthDist = map(lambda x: sentenceLengthFreqDist.freq(x), range(1,RANGE))
+    sentenceLengthDist = map(lambda x: sentenceLengthFreqDist.freq(x), range(1, RANGE))
     sentenceLengthDist.append(1-sum(sentenceLengthDist))
 
     pronounFreqDist = FreqDist(pronDist)
-    pronounDist = map(lambda x: pronounFreqDist.freq(x), range(1,RANGE))
+    pronounDist = map(lambda x: pronounFreqDist.freq(x), range(1, RANGE))
     pronounDist.append(1-sum(pronounDist))
 
     conjunctionFreqDist = FreqDist(conjDist)
-    conjunctionDist = map(lambda x: conjunctionFreqDist.freq(x), range(1,RANGE))
+    conjunctionDist = map(lambda x: conjunctionFreqDist.freq(x), range(1, RANGE))
     conjunctionDist.append(1-sum(conjunctionDist))
 
     wordLengthFreqDist= FreqDist(wordLenDist)
-    wordLengthDist = map(lambda x: wordLengthFreqDist.freq(x), range(1,RANGE))
+    wordLengthDist = map(lambda x: wordLengthFreqDist.freq(x), range(1, RANGE))
     wordLengthDist.append(1-sum(wordLengthDist))
 
     # calculate readability
@@ -161,7 +160,7 @@ def loadFeaturesForBook(filename, smartStopWords={}, pronSet={}, conjSet={}):
     result.extend(pronounDist)
     result.extend(conjunctionDist)
 
-    return whiten(result)
+    return result
 
 def simpleClassificationWithXFoldValidation(x, y, estimator=LinearSVC(), scoring=f_classif):
     print '#############################'
@@ -171,14 +170,14 @@ def simpleClassificationWithXFoldValidation(x, y, estimator=LinearSVC(), scoring
     fs = SelectKBest(scoring, k=70)
 
     pipeline = Pipeline([('featureselector', fs),
-                         ('scaler', MinMaxScaler(feature_range=(0,1))),
+                         ('scaler', MinMaxScaler(feature_range=(0, 1))),
                          ('estimator', estimator)])
 
     # StratifiedShuffleSplit returns stratified splits, i.e both train and test sets
     # preserve the same percentage for each target class as in the complete set.
     # Better than k-Fold shuffle since it allows finer control over samples on each
     # side of the train/test split.
-    cval = StratifiedShuffleSplit(y, n_iter=NUMFOLDS, test_size=.35) #, random_state=randint(1,100))
+    cval = StratifiedShuffleSplit(y, n_iter=NUMFOLDS, test_size=.35) #, random_state=randint(1, 100))
 
     # Inherently multiclass: Naive Bayes, sklearn.lda.LDA, Decision Trees, Random Forests, Nearest Neighbors.
     # One-Vs-One: sklearn.svm.SVC.
@@ -192,7 +191,7 @@ def simpleClassificationWithoutXFoldValidation(x, y, estimator, scoring):
     # feature selection since we have a small sample space
     fs = SelectPercentile(scoring, percentile=20)
 
-    pipeline = Pipeline([('featureselector',fs),('scaler',StandardScaler()),('estimator', estimator)])
+    pipeline = Pipeline([('featureselector', fs), ('scaler', StandardScaler()), ('estimator', estimator)])
 
     pipeline = OneVsRestClassifier(pipeline)
 
@@ -213,11 +212,11 @@ def simpleClassificationWithoutXFoldValidation(x, y, estimator, scoring):
 # diagnostic plot
 def createLegomenaPlot(x, y):
     # Plotting
-    colors = ['red','blue']
+    colors = ['red', 'blue']
     for index in xrange(len(colors)):
-        xs = x[:,0][y==index]
-        ys = x[:,1][y==index]
-        pt.scatter(xs,ys,c=colors[index])
+        xs = x[:, 0][y==index]
+        ys = x[:, 1][y==index]
+        pt.scatter(xs, ys, c=colors[index])
     pt.legend(['Mark Twain', 'Jack London'])
     pt.xlabel('Hapax Legomena')
     pt.ylabel('Dis Legomena')
@@ -225,15 +224,15 @@ def createLegomenaPlot(x, y):
     pt.show()
 
 # diagnostic plot
-def createSentenceDistributionPlot(x,y):
+def createSentenceDistributionPlot(x, y):
     barwidth = 0.3
     tomsawyer = loadFeaturesForBook('corpus/0/pg74.txt')[4:29]
     huckfinn = loadFeaturesForBook('corpus/0/pg76.txt')[4:29]
     princepauper = loadFeaturesForBook('corpus/0/pg1837.txt')[4:29]
     m = np.arange(len(tomsawyer))
-    pt.bar(m,tomsawyer,barwidth,label='Tom Sawyer',color='r')
-    pt.bar(m+barwidth,huckfinn,barwidth,label='Huck Finn',color='b')
-    pt.bar(m+2*barwidth,princepauper,barwidth,label='Prince and the Pauper',color='y')
+    pt.bar(m, tomsawyer, barwidth, label='Tom Sawyer', color='r')
+    pt.bar(m+barwidth, huckfinn, barwidth, label='Huck Finn', color='b')
+    pt.bar(m+2*barwidth, princepauper, barwidth, label='Prince and the Pauper', color='y')
     pt.legend()
     pt.tight_layout()
     pt.grid(axis='y')
@@ -253,19 +252,19 @@ def loadBookDataFromCorpus(dirList, fileList, smartStopWords={}, pronSet={}, con
     return np.array(x), np.array(le.transform(y)), le
 
 def loadBookDataFromFeaturesFile():
-    contents = open(FEATURESFILE,'rb').read().strip().split('\n')
+    contents = open(FEATURESFILE, 'rb').read().strip().split('\n')
     x = []
     y = []
     for line in contents:
         l = line.split('\t')
         y.append(int(l[1]))
-        x.append(map(float,l[2].split(',')))
+        x.append(map(float, l[2].split(',')))
     return np.array(x), np.array(y)
 
 def saveBookFeaturesToFile(x, y, le):
-    f = open(FEATURESFILE,'wb')
-    for index,item in enumerate(x):
-        f.write("%s\t%d\t%s\n" % (le.inverse_transform(y[index]),y[index],','.join(map(str,item))))
+    f = open(FEATURESFILE, 'wb')
+    for index, item in enumerate(x):
+        f.write("%s\t%d\t%s\n" % (le.inverse_transform(y[index]), y[index], ', '.join(map(str, item))))
     f.close()
 
 def hybridClassification(x, y, estimator=LinearSVC(random_state=0), scoring=f_classif):
@@ -301,9 +300,11 @@ def hybridClassification(x, y, estimator=LinearSVC(random_state=0), scoring=f_cl
     represents the output of a particular estimator for the sequence of samples we passed in
     to this function.
     '''
+
     print '#############################'
     print 'Running Hybrid Classification'
     print '#############################'
+
     scores = []
 
     cval = StratifiedShuffleSplit(y, n_iter=NUMFOLDS, test_size=.35)
@@ -312,42 +313,39 @@ def hybridClassification(x, y, estimator=LinearSVC(random_state=0), scoring=f_cl
         scores.append(runHybridClassificationOnTrainTest(x[train_index], x[test_index], y[train_index], y[test_index], estimator, scoring))
 
     scores = sorted(scores, key=lambda x:x[0], reverse=True)
-    #scores_ = np.array([elem[0] for elem in scores])
-    #print "Average accuracy: %2.3f (+/- %2.3f)" % (np.mean(scores_), sem(scores_))
+    scores_ = np.array([elem[0] for elem in scores])
+    print "Average accuracy: %2.3f (+/- %2.3f)" % (np.mean(scores_), sem(scores_))
 
-    (best_score, best_ovr, best_ovo) = scores[0]
-    print 'Best accuracy: %2.3f' % best_score
+    #(best_score, best_ovr, best_ovo) = scores[0]
+    #print 'Best accuracy: %2.3f' % best_score
     #print 'Best OVR params:'
     #print best_ovr.get_params()
     #print
     #print 'Accuracy of cross-validation with best OVR:'
-    #cval = StratifiedShuffleSplit(y, n_iter=NUMFOLDS, test_size=.35) #, random_state=randint(1,100))
+    #cval = StratifiedShuffleSplit(y, n_iter=NUMFOLDS, test_size=.35) #, random_state=randint(1, 100))
     #scores = cross_val_score(best_ovr, x, y, cv=cval, n_jobs=-1) # reports estimator accuracy
     #print "%2.3f (+/- %2.3f)" % (np.mean(scores), sem(scores))
     print
 
 def runHybridClassificationOnTrainTest(x_train, x_test, y_train, y_test, estimator, scoring):
-    scaler = MinMaxScaler(feature_range=(0,1))
-    scaler.fit_transform(x_train)
+    numFeatures = x_train.shape[1]
+    fs = SelectKBest(f_regression, k=2*numFeatures/3)
+    x_train = fs.fit_transform(x_train, y_train)
+    x_test = fs.transform(x_test)
+
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    x_train = scaler.fit_transform(x_train)
     x_test = scaler.transform(x_test)
 
+    #############################'
+    # PHASE 1
+    #############################'
     ovr = OneVsRestClassifier(estimator, n_jobs=-1)
-    ovo = OneVsOneClassifier(estimator, n_jobs=-1)
 
     ovr.fit(x_train, y_train)
-    ovo.fit(x_train, y_train)
 
     ovr_estimators = ovr.estimators_
-    ovo_estimators = ovo.estimators_
 
-    # first stage
-    # use the one-vs-rest classifier to predict this sample's class
-    # if only one classifier votes for a given sample, that sample is assumed to
-    # be correctly classified.
-    # second stage
-    # if not, repeat the procedure with the one-vs-one clasifier to predict the
-    # sample's class. If 0/multiple classifiers vote for a sample even this
-    # time, we leave it unclassified
     y_predict_ovr = getOVREstimatorsPredictions(ovr_estimators, x_test)
     #print y_predict_ovr # dimensions: no. of estimators X no. of samples. each row is the output of a particular estimator for
                          # all the samples we sent in
@@ -359,32 +357,39 @@ def runHybridClassificationOnTrainTest(x_train, x_test, y_train, y_test, estimat
                                                                        # [[0 0 0 0 0 0 0 0] <- none of the ovr_estimators thought this sample belonged to their class
                                                                        #  [0 0 0 1 0 0 0 0] <- ovr_estimator 3 thinks this sample belongs to its class
                                                                        #  [0 0 0 1 0 0 0 1]] <- ovr_estimator 3 and 7 both think this sample belongs to their class
-    classified_in_phase1 = 0
-    classified_in_phase2 = 0
-    unclassified = 0
+    #print sample_predictions_per_ovr_estimator
+
+    test_indices_unclassified_in_phase1 = []
     y_test_predict = np.ones(len(y_test))*-1 # -1 is an invalid value. Denotes an unclassified sample.
 
-    #print sample_predictions_per_ovr_estimator
     for index, sample_prediction in enumerate(sample_predictions_per_ovr_estimator):
         if(np.sum(sample_prediction)==1): # only one estimator's decision_function is +ve
-            #print sample_prediction
-            classified_in_phase1 += 1
             y_test_predict[index] = ovr.classes_[np.nonzero(sample_prediction)[0][0]]
         else:
-            # second stage (see description in comments above)
-            y_predict_ovo = getOVOEstimatorsPredictions(ovo_estimators, ovo.classes_, np.reshape(x_test[index],(1,len(x_test[index]))))
-            if y_predict_ovo == -1:
-                unclassified += 1
-            else:
-                classified_in_phase2 += 1
-                y_test_predict[index] = y_predict_ovo
-    #print classified_in_phase1
-    #print classified_in_phase2
-    #print unclassified
-    #print y_test
-    #print y_test_predict
-    #print metrics.accuracy_score(y_test_predict, y_test)
-    return (metrics.accuracy_score(y_test_predict, y_test),ovr,ovo)
+            test_indices_unclassified_in_phase1.append(index)
+
+    print 'Phase {phase} Correctly classified: {0:2.3f}'.format(float(np.sum(y_test_predict==y_test))/len(y_test), phase=1)
+    print 'Phase {phase} Unclassified: {0:2.3f}'.format(float(np.sum(y_test_predict==-1))/len(y_test), phase=1)
+
+    #############################'
+    # PHASE 2
+    #############################'
+    ovo = OneVsOneClassifier(estimator, n_jobs=-1)
+
+    ovo.fit(x_train, y_train)
+    ovo_estimators = ovo.estimators_
+
+    for index in test_indices_unclassified_in_phase1:
+        # second stage (see description in comments above)
+        y_predict_ovo = getOVOEstimatorsPredictions(ovo_estimators, ovo.classes_, np.reshape(x_test[index], (1, len(x_test[index]))))
+        if y_predict_ovo <> -1:
+            y_test_predict[index] = y_predict_ovo
+
+    print 'Phase {phase} Correctly classified: {0:2.3f}'.format(float(np.sum(y_test_predict==y_test))/len(y_test), phase=2)
+    print 'Phase {phase} Unclassified: {0:2.3f}'.format(float(np.sum(y_test_predict==-1))/len(y_test), phase=2)
+    print
+
+    return (metrics.accuracy_score(y_test_predict, y_test), ovr, ovo)
 
 def getOVREstimatorsPredictions(estimators, x_test):
     '''
@@ -418,7 +423,7 @@ def getOVOEstimatorsPredictions(estimators, classes, X):
     This function calls predict on the OVO's estimators. Internally, the estimators use the
     decision_function to decide whether or not to attribute the sample to a class. The result
     comes back to us as a 0 or 1 (since SVCs are inherently binary). Since this is an OVO,
-    a 1 simply indicates that an {m,n} estimator believes the sample belongs to the n class
+    a 1 simply indicates that an {m, n} estimator believes the sample belongs to the n class
     and a 0 that it belongs to the m class.
     In accordance with the hybrid algorithm, we check if an equal number of estimators have
     voted for more than one clas. If this is the case, we return an invalid value, -1. If not,
@@ -484,15 +489,15 @@ def runClassification():
         #             'corpus/mark-twain/pg3176.txt', 'corpus/mark-twain/pg119.txt']]
         ######### testing only #########
 
-        x,y,le = loadBookDataFromCorpus(dirList, fileList, smartStopWords, pronSet, conjSet)
-        saveBookFeaturesToFile(x,y,le)
+        x, y, le = loadBookDataFromCorpus(dirList, fileList, smartStopWords, pronSet, conjSet)
+        saveBookFeaturesToFile(x, y, le)
         print '... done.'
     else:
         print 'Feature file found. Reading...'
-        x,y = loadBookDataFromFeaturesFile()
+        x, y = loadBookDataFromFeaturesFile()
 
-    hybridClassification(x,y,LinearSVC(random_state=0, penalty="l1", dual=False, tol=1e-6)) # use ANOVA scoring
-    simpleClassificationWithXFoldValidation(x,y,LinearSVC(random_state=0),f_classif) # use ANOVA scoring
+    hybridClassification(x, y, LinearSVC()) # use ANOVA scoring
+    simpleClassificationWithXFoldValidation(x, y, LinearSVC(random_state=0), f_classif) # use ANOVA scoring
 
 if __name__ == '__main__':
     runClassification()
