@@ -359,8 +359,8 @@ def runHybridClassificationOnTrainTest(x_train, x_test, y_train, y_test, estimat
                                                                        # [[0 0 0 0 0 0 0 0] <- none of the ovr_estimators thought this sample belonged to their class
                                                                        #  [0 0 0 1 0 0 0 0] <- ovr_estimator 3 thinks this sample belongs to its class
                                                                        #  [0 0 0 1 0 0 0 1]] <- ovr_estimator 3 and 7 both think this sample belongs to their class
-    one_voted_phase1 = 0
-    one_voted_phase2 = 0
+    classified_in_phase1 = 0
+    classified_in_phase2 = 0
     unclassified = 0
     y_test_predict = np.ones(len(y_test))*-1 # -1 is an invalid value. Denotes an unclassified sample.
 
@@ -368,7 +368,7 @@ def runHybridClassificationOnTrainTest(x_train, x_test, y_train, y_test, estimat
     for index, sample_prediction in enumerate(sample_predictions_per_ovr_estimator):
         if(np.sum(sample_prediction)==1): # only one estimator's decision_function is +ve
             #print sample_prediction
-            one_voted_phase1 += 1
+            classified_in_phase1 += 1
             y_test_predict[index] = ovr.classes_[np.nonzero(sample_prediction)[0][0]]
         else:
             # second stage (see description in comments above)
@@ -376,10 +376,10 @@ def runHybridClassificationOnTrainTest(x_train, x_test, y_train, y_test, estimat
             if y_predict_ovo == -1:
                 unclassified += 1
             else:
-                one_voted_phase2 += 1
+                classified_in_phase2 += 1
                 y_test_predict[index] = y_predict_ovo
-    #print one_voted_phase1
-    #print one_voted_phase2
+    #print classified_in_phase1
+    #print classified_in_phase2
     #print unclassified
     #print y_test
     #print y_test_predict
@@ -491,7 +491,7 @@ def runClassification():
         print 'Feature file found. Reading...'
         x,y = loadBookDataFromFeaturesFile()
 
-    hybridClassification(x,y,LinearSVC(random_state=0)) # use ANOVA scoring
+    hybridClassification(x,y,LinearSVC(random_state=0, penalty="l1", dual=False, tol=1e-6)) # use ANOVA scoring
     simpleClassificationWithXFoldValidation(x,y,LinearSVC(random_state=0),f_classif) # use ANOVA scoring
 
 if __name__ == '__main__':
