@@ -13,7 +13,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC, LinearSVC
 from sklearn.linear_model.stochastic_gradient import SGDClassifier
 from sklearn.feature_selection import SelectPercentile, SelectKBest, chi2, f_classif
-from sklearn.multiclass import OneVsRestClassifier
+from sklearn.multiclass import OneVsRestClassifier, OneVsOneClassifier
 from scipy.stats import sem # standard error of mean
 import numpy as np
 import matplotlib.pyplot as pt
@@ -260,6 +260,71 @@ def saveBookFeaturesToFile(x, y, le):
         f.write("%s\t%d\t%s\n" % (le.inverse_transform(y[index]),y[index],','.join(map(str,item))))
     f.close()
 
+def hybridClassification(x, y, estimator=SVC(kernel='linear'), scoring=f_classif):
+    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.3) # 30% reserved for validation
+
+    scaler = MinMaxScaler(feature_range=(0,1))
+    scaler.fit_transform(x_train)
+    x_test = scaler.transform(x_test)
+
+    ovr = OneVsRestClassifier(estimator, n_jobs=-1)
+    ovo = OneVsRestClassifier(estimator, n_jobs=-1)
+
+    ovr.fit(x_train, y_train)
+    ovo.fit(x_train, y_train)
+
+    ovr_estimators = ovr.estimators_
+    ovo_estimators = ovo.estimators_
+
+    # first stage
+    # use the one-vs-rest classifier to predict this sample's class
+    # if only one classifier votes for a given sample, that sample is assumed to
+    # be correctly classified.
+    # second stage
+    # if not, repeat the procedure with the one-vs-one clasifier to predict the
+    # sample's class. If 0/multiple classifiers vote for a sample even this
+    # time, we leave it unclassified
+    y_predict_ovr = getEstimatorsPredictions(ovr_estimators, x_test)
+    #print y_predict_ovr
+
+    sample_predictions_per_ovr_estimator = np.dstack(np.array(y_predict_ovr))[0] # dimensions: no. samples X no. ovr_estimators.
+                                                                      # each row has the prediction of all ovr_estimators for a given sample.
+                                                                      # remember that this is an OVR classification so each estimator fits one class only.
+                                                                      # for that sample. e.g.
+                                                                      # [[0 0 0 0 0 0 0 0] <- none of the ovr_estimators thought this sample belonged to their class
+                                                                      #  [0 0 0 1 0 0 0 0] <- ovr_estimator 3 thinks this sample belongs to its class
+                                                                      #  [0 0 0 1 0 0 0 1]] <- ovr_estimator 3 and 7 both think this sample belongs to their class
+    correctly_classified_phase1 = 0
+    correctly_classified_phase2 = 0
+    unclassified = 0
+    y_test_predict = np.ones(len(y_test))*-1
+
+    #print sample_predictions_per_ovr_estimator
+    for index, sample_prediction in enumerate(sample_predictions_per_ovr_estimator):
+        if(np.sum(sample_prediction)==1): # only one estimator voted for this sample.
+            #print sample_prediction
+            correctly_classified_phase1 += 1
+            y_test_predict[index] = np.nonzero(sample_prediction)[0][0]
+        else:
+            # second stage (see description in comments above)
+            y_predict_ovo = getEstimatorsPredictions(ovo_estimators, x_test[index])
+            if(np.sum(y_predict_ovo)==1):
+                correctly_classified_phase2 += 1
+                y_test_predict[index] = np.nonzero(y_predict_ovo)[0][0]
+            else:
+                unclassified += 1
+    #print y_test
+    #print y_test_predict
+    print metrics.accuracy_score(y_test_predict, y_test)
+    #print metrics.classification_report(y_test_predict, y_test)
+
+
+def getEstimatorsPredictions(estimators, x_test):
+    y_predict = []
+    for index, e in enumerate(estimators):
+        y_predict.append(e.predict(x_test))
+    return y_predict
+
 def runClassification():
     x = []
     y = []
@@ -289,7 +354,8 @@ def runClassification():
         x,y = loadBookDataFromFeaturesFile()
 
     print 'Running classification'
-    withCrossFoldValidation(x,y,LinearSVC(),f_classif) # use ANOVA scoring
+    #withCrossFoldValidation(x,y,LinearSVC(),f_classif) # use ANOVA scoring
+    hybridClassification(x,y,LinearSVC(),f_classif) # use ANOVA scoring
 
 if __name__ == '__main__':
     runClassification()
