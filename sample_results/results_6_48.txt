@@ -1,0 +1,17 @@
+Processed 48 books from 6 authors with 1760631 total words in 173.787s
+Features saved to file /home/neeraj/workspace/svm-author-rec/src/bookfeatures.txt
+... done.
+
+48 samples in 6 classes
+
+With grid search, accuracy on testing set:                        0.458
+
+Without grid search, with cross-fold validation, accuracy:        0.717 (+/- 0.035)
+
+With hybrid classification, average correct after phase 1:        0.533 (+/- 0.034)
+With hybrid classification, average correct after phase 2:        0.733 (+/- 0.035)
+With hybrid classification, average incorrect after phase 1:      0.100 (+/- 0.014)
+With hybrid classification, average incorrect after phase 2:      0.256 (+/- 0.031)
+With hybrid classification, average unclassified after phase 1:   0.367 (+/- 0.040)
+With hybrid classification, average unclassified after phase 2:   0.011 (+/- 0.007)
+With hybrid classification, average accuracy:                     0.733 (+/- 0.035)
