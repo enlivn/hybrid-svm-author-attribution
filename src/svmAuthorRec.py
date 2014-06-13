@@ -31,14 +31,21 @@ class MyFreqDist(FreqDist):
     '''
     Extend FreqDist to implement dis legomena
     '''
+
     def dises(self):
-        """
+        '''
         @return: A list of all samples that occur twice (dis legomena)
         @rtype: C{list}
-        """
+        '''
+
         return [item for item in self if self[item] == 2]
 
 def extract_book_contents(text):
+    '''
+    Extract the contents of the book after excising the Project Gutenber headers
+    and footers.
+    '''
+
     start  = re.compile('START OF.*\r\n')
     end = re.compile('\*\*.*END OF ([THIS]|[THE])')
 
@@ -48,17 +55,37 @@ def extract_book_contents(text):
     return _2[0] # lower-case everything
 
 def build_pron_set():
+    '''
+    Build set of nominative pronouns.
+    '''
+
     return set(open(path.join(SRCDIR,'nompronouns.txt'), 'r').read().splitlines())
 
 def build_conj_set():
+    '''
+    Build set of coordinating and subordinating conjunctions.
+    '''
+
     return set(open(path.join(SRCDIR,'coordconj.txt'), 'r').read().splitlines()).union(
            set(open(path.join(SRCDIR,'subordconj.txt'), 'r').read().splitlines()))
 
 def build_stop_words_set():
+    '''
+    Build set of stop words to ignore.
+    '''
+
     # source: http://jmlr.org/papers/volume5/lewis04a/a11-smart-stop-list/english.stop
     return set(open(path.join(SRCDIR,'smartstop.txt'), 'r').read().splitlines())
 
 def get_file_dir_list(dir):
+    '''
+    Get a list of directories and files. Used to get the corpora.
+    Returns
+    -------
+    dirList: list of directory names to serve as class labels.
+    fileList: list of files in corpus.
+    '''
+
     fileList = []
     dirList = []
     for (dirpath, dirname, files) in walk(dir):
@@ -71,20 +98,24 @@ def load_book_features(filename, smartStopWords={}, pronSet={}, conjSet={}):
     '''
     Load features for each book in the corpus. There are 4 + RANGE*4 features
     for each instance. These features are:
-        1. number of hapax legomena divided by number of unique words
-        2. number of dis legomena divided by number of unique words
-        3. number of unique words divided by number of total words
-        4. flesch readability score divided by 100
+       ---------------------------------------------------------------------------------------------------------
+       No. Feature Name                                                                         No. of features.
+       ---------------------------------------------------------------------------------------------------------
+       1.  number of hapax legomena divided by number of unique words                           1
+       2.  number of dis legomena divided by number of unique words                             1
+       3.  number of unique words divided by number of total words                              1
+       4.  flesch readability score divided by 100                                              1
 
-        5. no. of sentences of length in the range [1, RANGE] divided by the
+       5.  no. of sentences of length in the range [1, RANGE] divided by the                    RANGE
            number of total sentences
-        6. no. of words of length in the range [1, RANGE] divided by the
+       6.  no. of words of length in the range [1, RANGE] divided by the                        RANGE
            number of total words
-        7. no. of nominative pronouns per sentence in the range [1, RANGE] divided by the
+       7.  no. of nominative pronouns per sentence in the range [1, RANGE] divided by the       RANGE
            number of total sentences
-        8. no. of (coordinating + subordinating) conjunctions per sentence in the range
+       8.  no. of (coordinating + subordinating) conjunctions per sentence in the range         RANGE
            [1, RANGE] divided by the number of total sentences
     '''
+
     text = extract_book_contents(open(filename, 'r').read()).lower()
 
     contents = re.sub('\'s|(\r\n)|-+|["_]', ' ', text) # remove \r\n, apostrophes, and --
@@ -165,6 +196,10 @@ def load_book_features(filename, smartStopWords={}, pronSet={}, conjSet={}):
     return result
 
 def simple_classification_with_cross_fold_validation(x, y, estimator=LinearSVC(), scoring=f_classif):
+    '''
+    Run normal SVM classification with cross-fold validation.
+    '''
+
     print '#############################'
     print 'Running Simple Classification'
     print '#############################'
@@ -190,6 +225,10 @@ def simple_classification_with_cross_fold_validation(x, y, estimator=LinearSVC()
     print
 
 def simple_classification_without_cross_fold_validation(x, y, estimator, scoring):
+    '''
+    Run normal SVM classification without cross-fold validation.
+    '''
+
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.3) # 30% reserved for validation
 
     # feature selection since we have a small sample space
@@ -215,6 +254,10 @@ def simple_classification_without_cross_fold_validation(x, y, estimator, scoring
 
 # diagnostic plot
 def create_legomena_plot(x, y):
+    '''
+    Diagnostic plot showing legomena.
+    '''
+
     # Plotting
     colors = ['red', 'blue']
     for index in xrange(len(colors)):
@@ -229,6 +272,10 @@ def create_legomena_plot(x, y):
 
 # diagnostic plot
 def create_sentence_distribution(x, y):
+    '''
+    Diagnostic plot showing sentence distributions for three of Mark Twain's books.
+    '''
+
     barwidth = 0.3
     tomsawyer = load_book_features(path.join(CORPUSPATH),'mark-twain/pg74.txt')[4:29]
     huckfinn = load_book_features(path.join(CORPUSPATH),'mark-twain/pg76.txt')[4:29]
@@ -244,6 +291,10 @@ def create_sentence_distribution(x, y):
     pt.show()
 
 def load_book_features_from_corpus(dirList, fileList, smartStopWords={}, pronSet={}, conjSet={}):
+    '''
+    Parse each book and load its features.
+    '''
+
     x = []
     y = []
     t0 = time()
@@ -256,6 +307,10 @@ def load_book_features_from_corpus(dirList, fileList, smartStopWords={}, pronSet
     return np.array(x), np.array(le.transform(y)), le
 
 def load_book_features_from_file():
+    '''
+    Parse a previously created features file and load features for all the book.
+    '''
+
     contents = open(FEATURESFILE, 'rb').read().strip().split('\n')
     x = []
     y = []
@@ -266,6 +321,10 @@ def load_book_features_from_file():
     return np.array(x), np.array(y)
 
 def save_book_features_to_file(x, y, le):
+    '''
+    Save book features to a features file.
+    '''
+
     f = open(FEATURESFILE, 'wb')
     for index, item in enumerate(x):
         f.write("%s\t%d\t%s\n" % (le.inverse_transform(y[index]), y[index], ', '.join(map(str, item))))
@@ -331,6 +390,10 @@ def hybrid_classification(x, y, estimator=LinearSVC(random_state=0), scoring=f_c
     print
 
 def hybrid_classification_for_fold(x_train, x_test, y_train, y_test, estimator, scoring):
+    '''
+    Runs the hybrid classification algorithm for each fold.
+    '''
+
     scaler = MinMaxScaler(feature_range=(0, 1))
     x_train = scaler.fit_transform(x_train)
     x_test = scaler.transform(x_test)
@@ -397,8 +460,6 @@ def hybrid_classification_for_fold(x_train, x_test, y_train, y_test, estimator, 
     incorrect_after_phase2 = float(len(filter(lambda x: x <> -1, y_test_predict[y_test_predict<>y_test])))/len(y_test)
     unclassified_after_phase2 = float(np.sum(y_test_predict==-1))/len(y_test)
 
-    #print
-
     accuracy_score = metrics.accuracy_score(y_test_predict, y_test)
 
     return np.array([accuracy_score, correct_after_phase1, correct_after_phase2, incorrect_after_phase1,\
@@ -406,7 +467,7 @@ def hybrid_classification_for_fold(x_train, x_test, y_train, y_test, estimator, 
 
 def get_ovr_estimators_prediction(estimators, x_test):
     '''
-    This function calls predict on the OVR's estimators. Internally, the estimators use the
+    This function calls predict on the OVR's estimators. Internally, the estimators use their
     decision_function to decide whether or not to attribute the sample to a class. The result
     comes back to us as a 0 or 1 (since SVCs are inherently binary). Since this is an OVR,
     a 1 simply indicates that the estimator believes the sample belongs to its class and a 0
@@ -426,6 +487,7 @@ def get_ovr_estimators_prediction(estimators, x_test):
     represents the output of a particular estimator for the sequence of samples we passed in
     to this function.
     '''
+
     y_predict = []
     for index, e in enumerate(estimators):
         y_predict.append(e.predict(x_test))
@@ -457,6 +519,7 @@ def get_ovo_estimators_prediction(estimators, classes, X):
     -------
     Returns -1 if there was a vote tie or the predicted class if there wasn't.
     '''
+
     n_samples = X.shape[0]
     n_classes = classes.shape[0]
     votes = np.zeros((n_samples, n_classes))
@@ -480,6 +543,10 @@ def get_ovo_estimators_prediction(estimators, classes, X):
         return classes[votes.argmax(axis=1)]
 
 def run_classification():
+    '''
+    Initiate classification.
+    '''
+
     x = []
     y = []
     if not path.exists(FEATURESFILE):
