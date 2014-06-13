@@ -1,30 +1,38 @@
 # Hybrid Classification on Shallow Text Analysis for Authorship Attribution
 
+import matplotlib.pyplot as pt
+import numpy as np
 import re
+import warnings
+
 from nltk import FreqDist
 from nltk.corpus import stopwords
 from nltk.tokenize import sent_tokenize
 from os import walk
 from os import path
-from sklearn import metrics
-from sklearn.preprocessing import MinMaxScaler, StandardScaler, LabelEncoder
-from sklearn.cross_validation import cross_val_score, train_test_split, StratifiedShuffleSplit
-from sklearn.pipeline import Pipeline
-from sklearn.svm import SVC, LinearSVC
-from sklearn.linear_model.stochastic_gradient import SGDClassifier
-from sklearn.feature_selection import SelectPercentile, SelectKBest, chi2, f_classif, f_regression
-from sklearn.multiclass import OneVsRestClassifier, OneVsOneClassifier, _predict_binary
+from pprint import pprint
 from scipy.stats import sem # standard error of mean
-import numpy as np
-import matplotlib.pyplot as pt
+from sklearn import metrics
+from sklearn.cross_validation import cross_val_score, train_test_split, StratifiedShuffleSplit
+from sklearn.feature_selection import SelectPercentile, SelectKBest, chi2, f_classif, f_regression
+from sklearn.grid_search import GridSearchCV
+from sklearn.linear_model.stochastic_gradient import SGDClassifier
+from sklearn.multiclass import OneVsRestClassifier, OneVsOneClassifier, _predict_binary
+from sklearn.pipeline import Pipeline
 from random import randint
+from sklearn.preprocessing import MinMaxScaler, StandardScaler, LabelEncoder
+from sklearn.svm import SVC, LinearSVC
 from syllables_en import count
+from sys import maxint
 from time import time
 
-NUMFOLDS = 5
+warnings.filterwarnings('ignore')
+
+NUMFOLDS = 10
 RANGE = 25 # set to 25 based on Diederich et al. 2000 as cited on page 9 of http://www.cnts.ua.ac.be/stylometry/Papers/MAThesis_KimLuyckx.pdf
 SRCDIR = path.dirname(path.realpath(__file__))
 FEATURESFILE = path.join(SRCDIR,'bookfeatures.txt')
+PICKLEFILE = path.join(SRCDIR,'estimator.pickle')
 CORPUSPATH = path.join(SRCDIR,'../corpus')
 
 class MyFreqDist(FreqDist):
@@ -82,17 +90,17 @@ def get_file_dir_list(dir):
     Get a list of directories and files. Used to get the corpora.
     Returns
     -------
-    dirList: list of directory names to serve as class labels.
-    fileList: list of files in corpus.
+    dir_list: list of directory names to serve as class labels.
+    file_list: list of files in corpus.
     '''
 
-    fileList = []
-    dirList = []
+    file_list = []
+    dir_list = []
     for (dirpath, dirname, files) in walk(dir):
         if files:
-            dirList.append(path.split(dirpath)[1])
-            fileList.append(map(lambda x: path.join(dirpath, x), files))
-    return dirList, fileList
+            dir_list.append(path.split(dirpath)[1])
+            file_list.append(map(lambda x: path.join(dirpath, x), files))
+    return dir_list, file_list
 
 def load_book_features(filename, smartStopWords={}, pronSet={}, conjSet={}):
     '''
@@ -118,7 +126,7 @@ def load_book_features(filename, smartStopWords={}, pronSet={}, conjSet={}):
 
     text = extract_book_contents(open(filename, 'r').read()).lower()
 
-    contents = re.sub('\'s|(\r\n)|-+|["_]', ' ', text) # remove \r\n, apostrophes, and --
+    contents = re.sub('\'s|(\r\n)|-+|["_]', ' ', text) # remove \r\n, apostrophes, and dashes
     sentenceList = sent_tokenize(contents.strip())
 
     cleanWords = []
@@ -193,16 +201,52 @@ def load_book_features(filename, smartStopWords={}, pronSet={}, conjSet={}):
     result.extend(pronounDist)
     result.extend(conjunctionDist)
 
-    return result
+    return result, numTotalWords
+
+def simple_classification_with_grid_search(x, y, estimator=SVC(kernel='linear'), scoring=f_classif):
+    '''
+    Run normal SVM classification with grid search
+    '''
+
+    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.5, random_state=0)
+    # Grid search must NEVER see all your data or it will overfit it. Hence, even though we use StratifiedShuffleSplit CV, we only pass in the training set. We
+    # will reserve the test set for evaluation below
+    cval = StratifiedShuffleSplit(y_train, n_iter=NUMFOLDS, test_size=.35)
+
+    # Set the parameters by cross-validation
+    hyperparameters = {
+        # complexity of combining hyperparameters for Grid Search increases combinatorially
+        #'scaler__feature_range': [(0,1),(-1,1)],
+        'featureselector__k':           [20,50,80],
+        #'featureselector__score_func':  [f_classif, f_regression]
+        'estimator__kernel':            ['rbf','linear'],
+        'estimator__gamma':             [1e-3, 1e-4],
+        'estimator__C':                 [1, 10, 100, 1000],
+        #'estimator__tol':               [1e-4, 1e-6],
+    }
+
+    # univariate feature selection since we have a small sample space
+    fs = SelectKBest(scoring, k=80)
+
+    pipeline = Pipeline([('featureselector', fs),
+                         ('scaler', MinMaxScaler(feature_range=(0, 1))),
+                         ('estimator', estimator)])
+
+    # scoring can be ['accuracy', 'adjusted_rand_score', 'average_precision', 'f1', 'log_loss', 'mean_squared_error', 'precision', 'r2', 'recall', 'roc_auc']
+    clf = GridSearchCV(pipeline, hyperparameters, scoring='recall', n_jobs=-1, cv=cval)
+    clf.fit(x_train, y_train)
+
+    #print "Best parameters set found on development set:"
+    #print clf.best_estimator_
+    #print
+    print "With grid search, accuracy on testing set:                        %2.3f" % clf.score(x_test, y_test)
+    print
 
 def simple_classification_with_cross_fold_validation(x, y, estimator=LinearSVC(), scoring=f_classif):
     '''
     Run normal SVM classification with cross-fold validation.
     '''
 
-    print '#############################'
-    print 'Running Simple Classification'
-    print '#############################'
     # univariate feature selection since we have a small sample space
     fs = SelectKBest(scoring, k=70)
 
@@ -220,8 +264,8 @@ def simple_classification_with_cross_fold_validation(x, y, estimator=LinearSVC()
     # One-Vs-One: sklearn.svm.SVC.
     # One-Vs-All: all linear models except sklearn.svm.SVC.
     scores = cross_val_score(pipeline, x, y, cv=cval, n_jobs=-1) # reports estimator accuracy
-    print "Number of folds:                      {0:d}".format(NUMFOLDS)
-    print "Accuracy:                             %2.3f (+/- %2.3f)" % (np.mean(scores), sem(scores))
+    #print "Number of folds:                      {0:d}".format(NUMFOLDS)
+    print "Without grid search, with cross-fold validation, accuracy:        %2.3f (+/- %2.3f)" % (np.mean(scores), sem(scores))
     print
 
 def simple_classification_without_cross_fold_validation(x, y, estimator, scoring):
@@ -251,6 +295,48 @@ def simple_classification_without_cross_fold_validation(x, y, estimator, scoring
 
     print "Confusion Matrix:"
     print metrics.confusion_matrix(y_test, y_predict_test)
+
+# diagnostic plot
+def create_improvement_plot(scores, correct_after_phase1, correct_after_phase2,
+             incorrect_after_phase1, incorrect_after_phase2,\
+             unclassified_after_phase1, unclassified_after_phase2, no_samples, no_classes):
+    '''
+    Create a plot showing the improvement in classification over phases.
+    '''
+
+    #(scores, correct_after_phase1, correct_after_phase2,
+    #         incorrect_after_phase1, incorrect_after_phase2,\
+    #         unclassified_after_phase1, unclassified_after_phase2) = results
+
+
+    correct_classif = (np.mean(correct_after_phase1), np.mean(correct_after_phase2))
+    correct_classif_err = (sem(correct_after_phase1), sem(correct_after_phase2))
+    incorrect_classif = (np.mean(incorrect_after_phase1), np.mean(incorrect_after_phase2))
+    incorrect_classif_err = (sem(incorrect_after_phase1), sem(incorrect_after_phase2))
+    unclassif = (np.mean(unclassified_after_phase1), np.mean(unclassified_after_phase2))
+    unclassif_err = (sem(unclassified_after_phase1), sem(unclassified_after_phase2))
+
+    ind = np.arange(len(correct_classif)) + 1
+    width = 0.2
+
+    f, ax = pt.subplots()
+    p_correct_classif =   ax.bar(ind, correct_classif,   width, color='#4DDB94',                                           yerr=correct_classif_err)
+    p_unclassif =         ax.bar(ind, unclassif,         width, color='#B8B8B8', bottom=correct_classif,                   yerr=unclassif_err)
+    p_incorrect_classif = ax.bar(ind, incorrect_classif, width, color='#FF6666', bottom=np.add(unclassif,correct_classif), yerr=incorrect_classif_err)
+
+    pt.title('Classification improvement over phases, {no_samples} samples, {no_classes} classes'.format(no_samples=no_samples, no_classes=no_classes))
+    pt.ylabel('Fraction of test samples')
+    pt.xticks(ind+width/2., ('After Phase 1', 'After Phase 2'))
+    pt.xlim(0,3)
+    pt.yticks(np.arange(0,1.1,0.1))
+    pt.ylim(0,1.4)
+    leg = pt.legend((p_correct_classif[0], p_unclassif[0], p_incorrect_classif[0]), \
+                    ('Correctly classified', 'Unclassified', 'Incorrectly classified'), \
+                    loc='upper center', fancybox=True)
+    leg.get_frame().set_alpha(0.5)
+    pt.grid(axis='y')
+    ax.set_axisbelow(True) # ensures the grid stays below the graph
+    pt.show()
 
 # diagnostic plot
 def create_legomena_plot(x, y):
@@ -290,7 +376,7 @@ def create_sentence_distribution(x, y):
     pt.xticks(m)
     pt.show()
 
-def load_book_features_from_corpus(dirList, fileList, smartStopWords={}, pronSet={}, conjSet={}):
+def load_book_features_from_corpus(dir_list, file_list, smartStopWords={}, pronSet={}, conjSet={}):
     '''
     Parse each book and load its features.
     '''
@@ -298,12 +384,15 @@ def load_book_features_from_corpus(dirList, fileList, smartStopWords={}, pronSet
     x = []
     y = []
     t0 = time()
-    for index, files in enumerate(fileList):
+    totalwords = 0
+    for index, files in enumerate(file_list):
         for f in files:
-            y.append(dirList[index])
-            x.append(load_book_features(f, smartStopWords, pronSet, conjSet))
+            y.append(dir_list[index])
+            features, numwords = load_book_features(f, smartStopWords, pronSet, conjSet)
+            totalwords += numwords
+            x.append(features)
     le = LabelEncoder().fit(y)
-    print '%d books loaded in %fs' % (len(x), time()-t0)
+    print 'Processed %d books from %d authors with %d total words in %2.3fs' % (len(x), len(dir_list), totalwords, time()-t0)
     return np.array(x), np.array(le.transform(y)), le
 
 def load_book_features_from_file():
@@ -329,6 +418,8 @@ def save_book_features_to_file(x, y, le):
     for index, item in enumerate(x):
         f.write("%s\t%d\t%s\n" % (le.inverse_transform(y[index]), y[index], ', '.join(map(str, item))))
     f.close()
+
+    print 'Features saved to file %s' % FEATURESFILE
 
 def hybrid_classification(x, y, estimator=LinearSVC(random_state=0), scoring=f_classif):
     '''
@@ -364,10 +455,6 @@ def hybrid_classification(x, y, estimator=LinearSVC(random_state=0), scoring=f_c
     to this function.
     '''
 
-    print '#############################'
-    print 'Running Hybrid Classification'
-    print '#############################'
-
     cval = StratifiedShuffleSplit(y, n_iter=NUMFOLDS, test_size=.35)
     results = []
 
@@ -378,16 +465,16 @@ def hybrid_classification(x, y, estimator=LinearSVC(random_state=0), scoring=f_c
              incorrect_after_phase1, incorrect_after_phase2,\
              unclassified_after_phase1, unclassified_after_phase2) = np.transpose(results)
 
-    print "Number of folds:                      {0:d}".format(NUMFOLDS)
-    print "Average correct after phase 1:        {0:2.3f} (+/- {1:2.3f})".format(np.mean(correct_after_phase1), sem(correct_after_phase1))
-    print "Average correct after phase 2:        {0:2.3f} (+/- {1:2.3f})".format(np.mean(correct_after_phase2), sem(correct_after_phase2))
-    print "Average incorrect after phase 1:      {0:2.3f} (+/- {1:2.3f})".format(np.mean(incorrect_after_phase1), sem(incorrect_after_phase1))
-    print "Average incorrect after phase 2:      {0:2.3f} (+/- {1:2.3f})".format(np.mean(incorrect_after_phase2), sem(incorrect_after_phase2))
-    print "Average unclassified after phase 1:   {0:2.3f} (+/- {1:2.3f})".format(np.mean(unclassified_after_phase1), sem(unclassified_after_phase1))
-    print "Average unclassified after phase 2:   {0:2.3f} (+/- {1:2.3f})".format(np.mean(unclassified_after_phase2), sem(unclassified_after_phase2))
-    print "Average accuracy:                     {0:2.3f} (+/- {1:2.3f})".format(np.mean(scores), sem(scores))
+    #print "With hybrid classification, number of folds:                      {0:d}".format(NUMFOLDS)
+    print "With hybrid classification, average correct after phase 1:        {0:2.3f} (+/- {1:2.3f})".format(np.mean(correct_after_phase1), sem(correct_after_phase1))
+    print "With hybrid classification, average correct after phase 2:        {0:2.3f} (+/- {1:2.3f})".format(np.mean(correct_after_phase2), sem(correct_after_phase2))
+    print "With hybrid classification, average incorrect after phase 1:      {0:2.3f} (+/- {1:2.3f})".format(np.mean(incorrect_after_phase1), sem(incorrect_after_phase1))
+    print "With hybrid classification, average incorrect after phase 2:      {0:2.3f} (+/- {1:2.3f})".format(np.mean(incorrect_after_phase2), sem(incorrect_after_phase2))
+    print "With hybrid classification, average unclassified after phase 1:   {0:2.3f} (+/- {1:2.3f})".format(np.mean(unclassified_after_phase1), sem(unclassified_after_phase1))
+    print "With hybrid classification, average unclassified after phase 2:   {0:2.3f} (+/- {1:2.3f})".format(np.mean(unclassified_after_phase2), sem(unclassified_after_phase2))
+    print "With hybrid classification, average accuracy:                     {0:2.3f} (+/- {1:2.3f})".format(np.mean(scores), sem(scores))
 
-    print
+    return np.transpose(results)
 
 def hybrid_classification_for_fold(x_train, x_test, y_train, y_test, estimator, scoring):
     '''
@@ -398,8 +485,9 @@ def hybrid_classification_for_fold(x_train, x_test, y_train, y_test, estimator, 
     x_train = scaler.fit_transform(x_train)
     x_test = scaler.transform(x_test)
 
-    numFeatures = x_train.shape[1]
-    fs = SelectPercentile(scoring, percentile=80)
+    num_features = x_train.shape[1]
+    fs = SelectKBest(scoring, k=2*num_features/3)
+    #fs = SelectPercentile(scoring, percentile=50)
     x_train = fs.fit_transform(x_train, y_train)
     x_test = fs.transform(x_test)
 
@@ -449,7 +537,6 @@ def hybrid_classification_for_fold(x_train, x_test, y_train, y_test, estimator, 
     ovo_estimators = ovo.estimators_
 
     for index in test_indices_unclassified_in_phase1:
-        # second stage (see description in comments above)
         y_predict_ovo = get_ovo_estimators_prediction(ovo_estimators, ovo.classes_, np.reshape(x_test[index], (1, len(x_test[index]))))
         if y_predict_ovo <> -1:
             y_test_predict[index] = y_predict_ovo
@@ -555,29 +642,45 @@ def run_classification():
         conjSet = build_conj_set()
         smartStopWords = build_stop_words_set()
 
-        dirList, fileList = get_file_dir_list(CORPUSPATH)
+        dir_list, file_list = get_file_dir_list(CORPUSPATH)
 
         ######### testing only #########
-        #dirList =['mark-twain']
-        #fileList = [['../corpus/mark-twain/pg74.txt']]
-        #dirList =['herman-melville', 'leo-tolstoy', 'mark-twain']
-        #fileList = [['../corpus/herman-melville/pg2701.txt', '../corpus/herman-melville/pg15859.txt',
-        #             '../corpus/herman-melville/pg10712.txt', '../corpus/herman-melville/pg21816.txt'],
-        #            ['../corpus/leo-tolstoy/pg2142.txt', '../corpus/leo-tolstoy/pg243.txt',
-        #             '../corpus/leo-tolstoy/1399-0.txt', '../corpus/leo-tolstoy/pg985.txt'],
-        #            ['../corpus/mark-twain/pg74.txt', '../corpus/mark-twain/pg245.txt',
-        #             '../corpus/mark-twain/pg3176.txt', '../corpus/mark-twain/pg119.txt']]
+        #dir_list =['herman-melville', 'leo-tolstoy', 'mark-twain']
+        #file_list = [
+        #              [path.join(CORPUSPATH,'herman-melville/pg2701.txt'),
+        #               path.join(CORPUSPATH,'herman-melville/pg15859.txt'),
+        #               path.join(CORPUSPATH,'herman-melville/pg10712.txt'),
+        #               path.join(CORPUSPATH,'herman-melville/pg21816.txt')],
+        #              [path.join(CORPUSPATH,'leo-tolstoy/pg2142.txt'),
+        #               path.join(CORPUSPATH,'leo-tolstoy/pg243.txt'),
+        #               path.join(CORPUSPATH,'leo-tolstoy/1399-0.txt'),
+        #               path.join(CORPUSPATH,'leo-tolstoy/pg985.txt')],
+        #              [path.join(CORPUSPATH,'mark-twain/pg74.txt'),
+        #               path.join(CORPUSPATH,'mark-twain/pg245.txt'),
+        #               path.join(CORPUSPATH,'mark-twain/pg3176.txt'),
+        #               path.join(CORPUSPATH,'mark-twain/pg119.txt')]
+        #            ]
         ######### testing only #########
 
-        x, y, le = load_book_features_from_corpus(dirList, fileList, smartStopWords, pronSet, conjSet)
+        x, y, le = load_book_features_from_corpus(dir_list, file_list, smartStopWords, pronSet, conjSet)
         save_book_features_to_file(x, y, le)
         print '... done.'
+        print
     else:
         print 'Feature file found. Reading...'
+        print
         x, y = load_book_features_from_file()
 
-    hybrid_classification(x, y, LinearSVC()) # use ANOVA scoring
+    no_samples = x.shape[0]
+    no_classes = len(set(y))
+
+    print "{no_samples} samples in {no_classes} classes".format(**locals())
+    print
+
+    simple_classification_with_grid_search(x, y, SVC(kernel='linear'), f_classif) # use ANOVA scoring
     simple_classification_with_cross_fold_validation(x, y, LinearSVC(random_state=0,tol=1e-8,penalty='l2',dual=True,C=1), f_classif) # use ANOVA scoring
+    hybrid_results = hybrid_classification(x, y, LinearSVC(random_state=0,tol=1e-8,penalty='l2',dual=True,C=1), f_classif) # use ANOVA scoring
+    #create_improvement_plot(*hybrid_results, no_samples=no_samples, no_classes=no_classes) # uncomment to show improvement over phases
 
 if __name__ == '__main__':
     run_classification()
