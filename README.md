@@ -6,7 +6,7 @@
     $> python src/svmAuthorRec.py
 
 ####Background
-This is an implementation of a Hybrid SVM text classification technique based on shallow text analysis as outlined in [1]. Shallow text analysis makes a statistical analysis of only the lexical features of the text (e.g. no. of unique words used) and hence is more computationally efficient than deep text analysis which also looks at semantic features of the text (e.g. distribution of POS).
+This is an implementation of a Hybrid SVM text classification technique based on shallow text analysis as outlined in [1]. Shallow text analysis makes a statistical analysis of only the lexical features of the text (e.g. no. of unique words used) and hence is more computationally efficient than deep text analysis which also looks at semantic features of the text (e.g. distribution of POS). For example, I was able to extract lexical features from the corpus consisting of 2.5 million words in only 240 seconds.
 
 ####Methodology
 I used 64 books downloaded from the Project Gutenberg website for this analysis. The books were written by 8 different authors: Mark Twain, Hermann Melville, Jack London, Leo Tolstoy, Oscar Wilde, Jane Austen, Alexandre Dumas and Robert Louis Stevenson. This collection should provide sufficiently different writing styles for the purposes of our analysis.
@@ -46,7 +46,21 @@ Here are the two phases:
 To analyze the performance of the algorithm, the output is analyzed after the end of each phase for the number of correctly classified samples, the number of incorrectly classified samples and the number of unclassified samples. These numbers are then averaged over each fold of the cross-validation phase. Similarly, I made a note of the average accuracy of the algorithm (over the 10 folds) after both the phases were done. Please see the 'Results' section for some numbers and graphs.
 
 ##### Benchmarking
-TODO.
+I compared the performance of this algorithm against two different classification models:
+
+  1. An SVC classifier with hyperparameters tuned using **grid search cross-validation**. The following parameters were tuned:
+
+    a. k for the feature selection (20, 50, 80)
+
+    b. kernel for the SVC (linear or RBF)
+
+    c. gamma for the SVC (0.001 or 0.0001)
+
+    d. C for the SVC (1, 10, 100 or 1000)
+
+  2. A simple LinearSVC classifier (which is inherently one-versus-rest) with feature selection and stratified shuffle split cross-validation.
+
+Results are presented in the next section.
 
 ####Results
 No. of classes  | No. of samples | Total words | Time taken for feature extraction (sec) | Accuracy
