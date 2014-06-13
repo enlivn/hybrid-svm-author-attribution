@@ -50,27 +50,27 @@ I compared the performance of this algorithm against two different classificatio
 
   1. An SVC classifier with hyperparameters tuned using **grid search cross-validation**. The following parameters were tuned:
 
-    a. k for the feature selection (20, 50, 80)
-
-    b. kernel for the SVC (linear or RBF)
-
-    c. gamma for the SVC (0.001 or 0.0001)
-
-    d. C for the SVC (1, 10, 100 or 1000)
+Tuned Parameter | Range
+--------| --------------
+k for the feature selection | 20, 50, 80
+kernel for the SVC | linear or RBF
+gamma for the SVC | 0.001 or 0.0001
+C for the SVC | 1, 10, 100 or 1000
 
   2. A simple LinearSVC classifier (which is inherently one-versus-rest) with feature selection and stratified shuffle split cross-validation.
 
 Results are presented in the next section.
 
 ####Results
-No. of classes  | No. of samples | Total words | Time taken for feature extraction (sec) | Accuracy
--------------   | -------------  | ----------- | -------- | -------
-4  | 32          |   1101724 | 128 | 0.792
-6  | 48          |   1760631 | 173 | 0.733
-8  | 64          |   2568246 | 243 | 0.637
+No. of classes  | No. of samples | Total words | Time taken for feature extraction (sec) | Accuracy from grid search | Accuracy from simple classification | Accuracy from hybrid classification
+-------------   | -------------  | ----------- | -------- | ------- | -------- | -------- | -----------
+4  | 32          |   1101724 | 128 | 0.750 | 0.775 | **0.792**
+6  | 48          |   1760631 | 173 | 0.458 | 0.717 | **0.733**
+8  | 64          |   2568246 | 243 | 0.594 | 0.617 | **0.637**
 
+(highest values are shown in bold)
 
-#####Graphs of classification improvement over the two phases for different numbers of samples:
+#####Graphs showing classification improvement over the two phases for different numbers of samples:
 
 ![4 classes, 32 samples](/sample_results/graph_4_32.png?raw=true)
 
