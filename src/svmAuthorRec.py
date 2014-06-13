@@ -23,7 +23,9 @@ from time import time
 
 NUMFOLDS = 5
 RANGE = 25 # set to 25 based on Diederich et al. 2000 as cited on page 9 of http://www.cnts.ua.ac.be/stylometry/Papers/MAThesis_KimLuyckx.pdf
-FEATURESFILE = 'bookfeatures.txt'
+SRCDIR = path.dirname(path.realpath(__file__))
+FEATURESFILE = path.join(SRCDIR,'bookfeatures.txt')
+CORPUSPATH = path.join(SRCDIR,'../corpus')
 
 class MyFreqDist(FreqDist):
     '''
@@ -46,15 +48,15 @@ def extract_book_contents(text):
     return _2[0] # lower-case everything
 
 def build_pron_set():
-    return set(open('nompronouns.txt', 'r').read().splitlines())
+    return set(open(path.join(SRCDIR,'nompronouns.txt'), 'r').read().splitlines())
 
 def build_conj_set():
-    return set(open('coordconj.txt', 'r').read().splitlines()).union(
-           set(open('subordconj.txt', 'r').read().splitlines()))
+    return set(open(path.join(SRCDIR,'coordconj.txt'), 'r').read().splitlines()).union(
+           set(open(path.join(SRCDIR,'subordconj.txt'), 'r').read().splitlines()))
 
 def build_stop_words_set():
     # source: http://jmlr.org/papers/volume5/lewis04a/a11-smart-stop-list/english.stop
-    return set(open('smartstop.txt', 'r').read().splitlines())
+    return set(open(path.join(SRCDIR,'smartstop.txt'), 'r').read().splitlines())
 
 def get_file_dir_list(dir):
     fileList = []
@@ -183,7 +185,9 @@ def simple_classification_with_cross_fold_validation(x, y, estimator=LinearSVC()
     # One-Vs-One: sklearn.svm.SVC.
     # One-Vs-All: all linear models except sklearn.svm.SVC.
     scores = cross_val_score(pipeline, x, y, cv=cval, n_jobs=-1) # reports estimator accuracy
-    print "%2.3f (+/- %2.3f)" % (np.mean(scores), sem(scores))
+    print "Number of folds:                      {0:d}".format(NUMFOLDS)
+    print "Accuracy:                             %2.3f (+/- %2.3f)" % (np.mean(scores), sem(scores))
+    print
 
 def simple_classification_without_cross_fold_validation(x, y, estimator, scoring):
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.3) # 30% reserved for validation
@@ -226,9 +230,9 @@ def create_legomena_plot(x, y):
 # diagnostic plot
 def create_sentence_distribution(x, y):
     barwidth = 0.3
-    tomsawyer = load_book_features('corpus/0/pg74.txt')[4:29]
-    huckfinn = load_book_features('corpus/0/pg76.txt')[4:29]
-    princepauper = load_book_features('corpus/0/pg1837.txt')[4:29]
+    tomsawyer = load_book_features(path.join(CORPUSPATH),'mark-twain/pg74.txt')[4:29]
+    huckfinn = load_book_features(path.join(CORPUSPATH),'mark-twain/pg76.txt')[4:29]
+    princepauper = load_book_features(path.join(CORPUSPATH),'mark-twain/pg1837.txt')[4:29]
     m = np.arange(len(tomsawyer))
     pt.bar(m, tomsawyer, barwidth, label='Tom Sawyer', color='r')
     pt.bar(m+barwidth, huckfinn, barwidth, label='Huck Finn', color='b')
@@ -315,6 +319,7 @@ def hybrid_classification(x, y, estimator=LinearSVC(random_state=0), scoring=f_c
              incorrect_after_phase1, incorrect_after_phase2,\
              unclassified_after_phase1, unclassified_after_phase2) = np.transpose(results)
 
+    print "Number of folds:                      {0:d}".format(NUMFOLDS)
     print "Average correct after phase 1:        {0:2.3f} (+/- {1:2.3f})".format(np.mean(correct_after_phase1), sem(correct_after_phase1))
     print "Average correct after phase 2:        {0:2.3f} (+/- {1:2.3f})".format(np.mean(correct_after_phase2), sem(correct_after_phase2))
     print "Average incorrect after phase 1:      {0:2.3f} (+/- {1:2.3f})".format(np.mean(incorrect_after_phase1), sem(incorrect_after_phase1))
@@ -483,18 +488,18 @@ def run_classification():
         conjSet = build_conj_set()
         smartStopWords = build_stop_words_set()
 
-        dirList, fileList = get_file_dir_list('corpus')
+        dirList, fileList = get_file_dir_list(CORPUSPATH)
 
         ######### testing only #########
         #dirList =['mark-twain']
-        #fileList = [['corpus/mark-twain/pg74.txt']]
+        #fileList = [['../corpus/mark-twain/pg74.txt']]
         #dirList =['herman-melville', 'leo-tolstoy', 'mark-twain']
-        #fileList = [['corpus/herman-melville/pg2701.txt', 'corpus/herman-melville/pg15859.txt',
-        #             'corpus/herman-melville/pg10712.txt', 'corpus/herman-melville/pg21816.txt'],
-        #            ['corpus/leo-tolstoy/pg2142.txt', 'corpus/leo-tolstoy/pg243.txt',
-        #             'corpus/leo-tolstoy/1399-0.txt', 'corpus/leo-tolstoy/pg985.txt'],
-        #            ['corpus/mark-twain/pg74.txt', 'corpus/mark-twain/pg245.txt',
-        #             'corpus/mark-twain/pg3176.txt', 'corpus/mark-twain/pg119.txt']]
+        #fileList = [['../corpus/herman-melville/pg2701.txt', '../corpus/herman-melville/pg15859.txt',
+        #             '../corpus/herman-melville/pg10712.txt', '../corpus/herman-melville/pg21816.txt'],
+        #            ['../corpus/leo-tolstoy/pg2142.txt', '../corpus/leo-tolstoy/pg243.txt',
+        #             '../corpus/leo-tolstoy/1399-0.txt', '../corpus/leo-tolstoy/pg985.txt'],
+        #            ['../corpus/mark-twain/pg74.txt', '../corpus/mark-twain/pg245.txt',
+        #             '../corpus/mark-twain/pg3176.txt', '../corpus/mark-twain/pg119.txt']]
         ######### testing only #########
 
         x, y, le = load_book_features_from_corpus(dirList, fileList, smartStopWords, pronSet, conjSet)
