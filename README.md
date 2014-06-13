@@ -1,28 +1,29 @@
-Hybrid SVM Classification on Shallow Text Features for Author Attribution
------
+###Hybrid SVM Classification on Shallow Text Features for Author Attribution
 
 
-###Running
+####Running
     $> git clone https://github.com/neeraj2608/hybrid-svm-author-attribution.git
     $> cd hybrid-svm-author-attribution
     $> python src/svmAuthorRec.py
 
-###Results
-Accuracy:
+####Results
+No. of classes  | No. of samples | Accuracy
+------------- | ------------- | -------------
+4  | 32          |   0.792
+6  | 48          |   0.733
+8  | 64          |   0.637
 
-| Accuracy | No. of classes | No. of samples
-------------------------------------------
 
 
 Graphs of classification improvement over the two phases for different numbers of samples:
 
-![4 classes, 32 samples][sample_results/graph_4_32.png]
+![4 classes, 32 samples](/sample_results/graph_4_32.png?raw=true)
 
-![6 classes, 48 samples][sample_results/graph_6_48.png]
+![6 classes, 48 samples](/sample_results/graph_6_48.png?raw=true)
 
-![8 classes, 64 samples][sample_results/graph_8_64.png]
+![8 classes, 64 samples](/sample_results/graph_8_64.png?raw=true)
 
-###Acknowledgements:
+####Acknowledgements:
 
 * [Stanko, S., Lu, D., Hsu, I. _Whose Book is it Anyway?
 Using Machine Learning to Identify the Author of Unknown Texts_](cs229.stanford.edu/proj2013/StankoLuHsu-AuthorIdentification.pdf) (PDF)
@@ -38,3 +39,4 @@ Using Machine Learning to Identify the Author of Unknown Texts_](cs229.stanford.
 * Scikit-Learn
 
 * Project Gutenberg
+
