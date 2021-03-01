@@ -1,14 +1,14 @@
-###Hybrid SVM Classification on Shallow Text Features for Author Attribution
+### Hybrid SVM Classification on Shallow Text Features for Author Attribution
 
-####Running
+#### Running
     $> git clone https://github.com/neeraj2608/hybrid-svm-author-attribution.git
     $> cd hybrid-svm-author-attribution
     $> python src/svmAuthorRec.py
 
-####Background
+#### Background
 This is an implementation of a Hybrid SVM text classification technique based on shallow text analysis as outlined in [1]. Shallow text analysis makes a statistical analysis of only the lexical features of the text (e.g. no. of unique words used) and hence is more computationally efficient than deep text analysis which also looks at semantic features of the text (e.g. distribution of POS). For example, I was able to extract lexical features from the corpus consisting of 2.5 million words in only 240 seconds.
 
-####Methodology
+#### Methodology
 I used 64 books downloaded from the Project Gutenberg website for this analysis. The books were written by 8 different authors: Mark Twain, Hermann Melville, Jack London, Leo Tolstoy, Oscar Wilde, Jane Austen, Alexandre Dumas and Robert Louis Stevenson. This collection should provide sufficiently different writing styles for the purposes of our analysis.
 
 ##### Feature extraction
@@ -50,21 +50,22 @@ I compared the performance of this algorithm against two different classificatio
 
   1. An SVC classifier with hyperparameters tuned using **grid search cross-validation**. The following parameters were tuned:
 
-  Tuned Parameter | Range
-  --------| --------------
-  k for the feature selection | 20, 50, 80
-  kernel for the SVC | linear or RBF
-  gamma for the SVC | 0.001 or 0.0001
-  C for the SVC | 1, 10, 100 or 1000
+  | Tuned Parameter | Range |
+  | --------| -------------- |
+  | k for the feature selection | 20, 50, 80 |
+  | kernel for the SVC | linear or RBF |
+  | gamma for the SVC | 0.001 or 0.0001 |
+  | C for the SVC | 1, 10, 100 or 1000 |
 
   2. A simple LinearSVC classifier (which is inherently one-versus-rest) with feature selection and stratified shuffle split cross-validation.
 
-####Results
-No. of classes  | No. of samples | Total words | Time taken for feature extraction (sec) | Accuracy from grid search | Accuracy from simple classification | Accuracy from hybrid classification
--------------   | -------------  | ----------- | -------- | ------- | -------- | -------- | -----------
-4  | 32          |   1101724 | 128 | 0.750 | 0.775 | **0.792**
-6  | 48          |   1760631 | 173 | 0.458 | 0.717 | **0.733**
-8  | 64          |   2568246 | 243 | 0.594 | 0.617 | **0.637**
+#### Results
+
+| No. of classes  | No. of samples | Total words | Time taken for feature extraction (sec) | Accuracy from grid search | Accuracy from simple classification | Accuracy from hybrid classification |
+| -------------   | -------------  | ----------- | -------- | ------- | -------- | -------- |
+| 4  | 32          |   1101724 | 128 | 0.750 | 0.775 | **0.792** |
+| 6  | 48          |   1760631 | 173 | 0.458 | 0.717 | **0.733** |
+| 8  | 64          |   2568246 | 243 | 0.594 | 0.617 | **0.637** |
 
 #####Graphs showing classification improvement over the two phases for different numbers of samples:
 
@@ -74,12 +75,12 @@ No. of classes  | No. of samples | Total words | Time taken for feature extracti
 
 ![8 classes, 64 samples](/sample_results/graph_8_64.png?raw=true)
 
-#####Observations
+##### Observations
 My results are in line with what is reported in [1] where an accuracy of 0.7 was obtained with a corpus of 38 pieces of texts from 8 authors. In addition, because the algorithm only carries out shallow text analysis, performance is quite fast.
 
 The graphs show that the classification does improve across phases, irrespective of the number of samples of the data. However, we can also see that the accuracy of the algorithm decreases as the number of samples increases. Presumably, this is because lexical features are no longer enough to distinguish between the increased information. Note that [4] suggests that shallow lexical features should be used to support other more complicated features for authorship attribution.
 
-####Acknowledgements:
+#### Acknowledgements:
 This was my first foray into Natural Language Processing and Machine Learning and I really enjoyed it! I made heavy use of the superb scikit-learn and NLTK libraries. In addition, I also made use of the following resources.
 
 * NLTK-Contrib for the syllable_en.py file which allows counting the number of syllables in a word and thus calculating the Flesch Readability index for a given text
@@ -89,7 +90,7 @@ This was my first foray into Natural Language Processing and Machine Learning an
 * Project Gutenberg
 
 
-####References
+#### References
 
 [1] [Stanko, S., Lu, D., Hsu, I. _Whose Book is it Anyway?
 Using Machine Learning to Identify the Author of Unknown Texts_](cs229.stanford.edu/proj2013/StankoLuHsu-AuthorIdentification.pdf) (PDF)
